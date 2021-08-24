@@ -1,0 +1,275 @@
+---
+title: "Estatistica - Mercado Financeira"
+author: "Adalberto dos Santos Junior"
+date: "22/08/2021"
+output: pdf_document
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Pacotes
+
+```{r warning=FALSE, message=FALSE}
+library(tidyverse)
+library(tidyquant)
+library(timetk)
+library(scales)
+library(quantmod)
+library(gridExtra)
+library(PerformanceAnalytics)
+library(fPortfolio)
+```
+
+## coleta de dados
+
+```{r warning=FALSE, message=FALSE}
+symbols = c('WEGE3.SA', 'ITUB4.SA', 'VALE3.SA', 'PETR4.SA', 'MGLU3.SA')
+w = c(rep(0.20, 5))
+
+prices = getSymbols(symbols, src = 'yahoo',
+                    from = '2017-01-01',
+                    warning = FALSE) %>%
+  map(~Ad(get(.))) %>%
+  reduce(merge) %>%
+  'colnames<-' (symbols) %>%
+  tk_tbl(preserve_index = TRUE,
+         rename_index = 'date') %>%
+  drop_na()
+
+returns = prices %>%
+  gather(asset, prices, -date) %>%
+  group_by(asset) %>%
+  tq_transmute(mutate_fun = periodReturn,
+               period = 'monthly',
+               type = 'log') %>%
+  spread(asset, monthly.returns) %>%
+  select(date, symbols)
+
+```
+
+# Visualização dos dados
+```{r warning=FALSE, message=FALSE}
+ggplot(prices, aes(x=date))+
+  geom_line(aes(y=WEGE3.SA, colour='WEGE3'))+
+  geom_line(aes(y=ITUB4.SA, colour='ITUB4'))+
+  geom_line(aes(y=VALE3.SA, colour='VALE3'))+
+  geom_line(aes(y=PETR4.SA, colour='PETR4'))+
+  geom_line(aes(y=MGLU3.SA, colour='MGLU3'))+
+  scale_colour_manual('', values=c('WEGE3'='blue',
+                                   'ITUB4'='red',
+                                   'VALE3'='green',
+                                   'PETR4'='yellow',
+                                   'MGLU3'='purple'))+
+  scale_x_date(breaks=date_breaks('3 month'), labels = date_format('%b/%Y'))+
+  theme(axis.text.x = element_text(angle=45, hjust=1),
+        legend.position = 'bottom')+
+  labs(x='', y='R$',
+       title='Preços - Ações selecionadas',
+       caption='Fonte: Dados do Yahoo Finance')
+
+
+ggplot(returns, aes(x=date))+
+  geom_line(aes(y=WEGE3.SA, colour='WEGE3'))+
+  geom_line(aes(y=ITUB4.SA, colour='ITUB4'))+
+  geom_line(aes(y=VALE3.SA, colour='VALE3'))+
+  geom_line(aes(y=PETR4.SA, colour='PETR4'))+
+  geom_line(aes(y=MGLU3.SA, colour='MGLU3'))+
+  geom_hline(yintercept=0, linetype='dashed', colour='black')+
+  scale_colour_manual('', values=c('WEGE3'='blue',
+                                   'ITUB4'='red',
+                                   'VALE3'='green',
+                                   'PETR4'='yellow',
+                                   'MGLU3'='purple'))+
+  scale_x_date(breaks=date_breaks('3 month'), labels = date_format('%b/%Y'))+
+  theme(axis.text.x = element_text(angle=45, hjust=1),
+        legend.position = 'bottom')+
+  labs(x='', y='%',
+       title='Retornos (Mensais) - Ações selecionadas',
+       caption='Fonte: Dados do Yahoo Finance')
+```
+# Retorno do Portfolio (Mesmos pesos ativos)
+
+```{r warning=FALSE, message=FALSE}
+asset_returns_long = 
+  returns %>%
+  gather(asset, returns, -date) %>%
+  group_by(asset)
+
+portfolio_return =
+  asset_returns_long %>%
+  tq_portfolio(assets_col = asset,
+               returns_col = returns,
+               weights = w,
+               col_rename = 'returns',
+               rebalance_on = 'months')
+
+ggplot(portfolio_return, aes(x = date, y = returns))+
+  geom_point()+
+  geom_hline(yintercept = 0, colour = 'red', linetype = 'dashed')
+
+```
+
+
+
+# Estatisticas basicas
+
+```{r warning=FALSE, message=FALSE}
+summary(returns[,-1])
+
+```
+
+# Grafico Boxplot dos Retornos
+
+```{r warning=FALSE, message=FALSE}
+g1 <- ggplot(returns, aes(WEGE3.SA))+
+  geom_boxplot(fill = 'blue', colour = 'black', outlier.shape = 2)
+
+g2 <- ggplot(returns, aes(ITUB4.SA))+
+  geom_boxplot(fill = 'red', colour = 'black', outlier.shape = 2)
+
+g3 <- ggplot(returns, aes(VALE3.SA))+
+  geom_boxplot(fill = 'green', colour = 'black', outlier.shape = 2)
+
+g4 <- ggplot(returns, aes(PETR4.SA))+
+  geom_boxplot(fill = 'yellow', colour = 'black', outlier.shape = 2)
+
+g5 <- ggplot(returns, aes(MGLU3.SA))+
+  geom_boxplot(fill = 'purple', colour = 'black', outlier.shape = 2)
+
+grid.arrange(g1, g2, g3, g4, g5, ncol= 2)
+
+```
+
+# Histograma dos Retornos
+
+```{r warning=FALSE, message=FALSE}
+g6 <- ggplot(returns, aes(WEGE3.SA))+
+  geom_histogram(bins = 20, fill = 'blue', colour = 'black')+
+  geom_density(alpha = 0.1, colour = 'gray', fill = 'brown')
+
+g7 <- ggplot(returns, aes(ITUB4.SA))+
+  geom_histogram(bins = 20, fill = 'red', colour = 'black')+
+  geom_density(alpha = 0.1, colour = 'gray', fill = 'brown')
+
+g8 <- ggplot(returns, aes(VALE3.SA))+
+  geom_histogram(bins = 20, fill = 'green', colour = 'black')+
+  geom_density(alpha = 0.1, colour = 'gray', fill = 'brown')
+
+g9 <- ggplot(returns, aes(PETR4.SA))+
+  geom_histogram(bins = 20, fill = 'yellow', colour = 'black')+
+  geom_density(alpha = 0.1, colour = 'gray', fill = 'brown')
+
+g10 <- ggplot(returns, aes(MGLU3.SA))+
+  geom_histogram(bins = 20, fill = 'purple', colour = 'black')+
+  geom_density(alpha = 0.1, colour = 'gray', fill = 'brown')
+
+grid.arrange(g6, g7, g8, g9, g10, ncol= 2)
+```
+
+# Correlação dos Ativos
+
+```{r warning=FALSE, message=FALSE}
+correlacao =cor(returns[,2:6])
+correlacao
+```
+
+# Portfolio de Minima Variancia
+
+```{r warning=FALSE, message=FALSE}
+ret <- as.timeSeries(returns[,2:6])
+
+cart_w <- minvariancePortfolio(ret)
+getWeights(cart_w)
+```
+
+# Portfolio Eficiente.
+
+```{r warning=FALSE, message=FALSE}
+cart_w2 <- tangencyPortfolio(ret)
+getWeights(cart_w2)
+```
+
+# Fronteira Eficiente
+
+```{r warning=FALSE, message=FALSE}
+tailoredFrontierPlot(portfolioFrontier(ret,
+                                       spec = portfolioSpec(optim = list(solver = "solveRshortExact")),
+                                       constraints = "Short"))
+```
+
+# Índice de Sharp ao longo do tempo
+
+```{r warning=FALSE, message=FALSE}
+portfolio_returns_xts <- xts(portfolio_return$returns,
+                             order.by = portfolio_return$date)
+
+rfr <- 2/100
+Sharpe_Ratio =
+  SharpeRatio(portfolio_returns_xts,
+              Rf = rfr,
+              FUN = 'StdDev')
+
+window = 24
+rolling_sharpe = 
+  rollapply(portfolio_returns_xts,
+            window,
+            function(x)
+              SharpeRatio(x,
+                          Rf = rfr,
+                          FUN = 'StdDev')) %>%
+  `colnames<-`('sharpe') %>%
+  na.omit()
+
+rolling_sharpe %>%
+  tk_tbl(preserve_index = TRUE, rename_index = 'date') %>%
+  ggplot(aes(x=date, y=sharpe))+
+  geom_line(colour='cornflowerblue', size=.8)+
+  geom_hline(yintercept=0, colour='black', linetype='dashed')+
+  labs(title='Índice de Sharpe ao longo do tempo')
+```
+
+
+# Covariancia do Retorno dos Ativos e o Mercado
+
+```{r warning=FALSE, message=FALSE}
+market_returns_xts = 
+  getSymbols('^BVSP', src = 'yahoo',
+             from='2016-12-01',
+             auto.assign = TRUE,
+             warnings = FALSE)
+
+market_returns_xts = BVSP$BVSP.Adjusted %>%
+  `colnames<-`('BVSP') %>%
+  to.monthly(indexAt = 'lastof', OHLC = FALSE) %>%
+  Return.calculate(method = "log") %>%
+  na.omit()
+
+cov(portfolio_returns_xts, market_returns_xts)/
+  var(market_returns_xts)
+```
+
+# CAPM
+
+```{r warning=FALSE, message=FALSE}
+market_return_tidy = 
+  market_returns_xts %>%
+  tk_tbl(preserve_index = TRUE,
+         rename_index = 'date') %>%
+  na.omit() %>%
+  select(date, returns = BVSP)
+
+portfolio_return =
+  portfolio_return %>%
+  mutate(market_returns = market_return_tidy$returns)
+
+ggplot(portfolio_return, 
+       aes(x=market_returns, y=returns))+
+  geom_point()+
+  geom_smooth(method = 'lm', se=FALSE, colour='red')+
+  labs(x='Retorno do Mercado', y='Retorno do Portfólio')
+
+```
+
